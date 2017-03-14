@@ -213,6 +213,9 @@ class Adam(Optimizer):
         beta2: `float`. The exponential decay rate for the 2nd moment
             estimates.
         epsilon: `float`. A small constant for numerical stability.
+        lr_decay: `float`. The learning rate decay to apply.
+        decay_step: `int`. Apply decay every provided steps.
+        staircase: `bool`. It `True` decay learning rate at discrete intervals.
         use_locking: `bool`. If True use locks for update operation.
         name: `str`. Optional name prefix for the operations created when
             applying gradients. Defaults to "Adam".
@@ -227,20 +230,36 @@ class Adam(Optimizer):
     """
 
     def __init__(self, learning_rate=0.001, beta1=0.9, beta2=0.999,
-                 epsilon=1e-8, use_locking=False, name="Adam"):
+                 epsilon=1e-8, lr_decay=0., decay_step=100,
+                 staircase=False, use_locking=False, name="Adam"):
         super(Adam, self).__init__(learning_rate, use_locking, name)
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
+        self.lr_decay = lr_decay
+        if self.lr_decay > 0.:
+            self.has_decay = True
+        self.decay_step = decay_step
+        self.staircase = staircase
 
     def build(self, step_tensor=None):
         self.built = True
+        if self.has_decay:
+            if not step_tensor:
+                raise Exception("Learning rate decay but no step_tensor "
+                                "provided.")
+            self.learning_rate = tf.train.exponential_decay(
+                self.learning_rate, step_tensor,
+                self.decay_step, self.lr_decay,
+                staircase=self.staircase)
+            tf.add_to_collection(tf.GraphKeys.LR_VARIABLES, self.learning_rate)
         self.tensor = tf.train.AdamOptimizer(
             learning_rate=self.learning_rate, beta1=self.beta1,
             beta2=self.beta2, epsilon=self.epsilon,
             use_locking=self.use_locking, name=self.name)
 
 adam = Adam
+
 
 
 class Momentum(Optimizer):
